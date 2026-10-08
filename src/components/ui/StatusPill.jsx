@@ -1,0 +1,1 @@
+export function StatusPill({ value }) { const key = String(value ?? 'UNKNOWN').toLowerCase(); return <span className={`status status--${key}`}>{String(value ?? 'Unknown').replaceAll('_', ' ')}</span> }
