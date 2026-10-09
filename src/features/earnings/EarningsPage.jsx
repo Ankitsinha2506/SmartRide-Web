@@ -9,6 +9,7 @@ import { DataTable } from '../../components/ui/DataTable'
 export function EarningsPage() {
   const query = useQuery({
     queryKey: ['vendor-bookings'],
+    // Note: /bookings/vendor/me returns all bookings without pagination — totals are always complete.
     queryFn: () => api.get('/bookings/vendor/me'),
   })
 

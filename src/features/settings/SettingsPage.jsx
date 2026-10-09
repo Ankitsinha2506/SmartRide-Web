@@ -26,14 +26,26 @@ export function SettingsPage() {
   const [pwSuccess, setPwSuccess] = useState(false)
   const [pwError, setPwError] = useState('')
 
-  // Notification toggles (client-side only)
+  // Notification toggles — persisted to localStorage keyed by user ID
   // TODO: persist to /vendor/preferences when endpoint is available
-  const [notifs, setNotifs] = useState({
-    emailNotifications: true,
-    pushNotifications: true,
-    bookingAlerts: true,
-    paymentAlerts: false,
+  const storageKey = `smartride_notifs_${user?.id || 'guest'}`
+  const [notifs, setNotifs] = useState(() => {
+    try {
+      const saved = localStorage.getItem(storageKey)
+      if (saved) return JSON.parse(saved)
+    } catch (_) { /* ignore parse errors */ }
+    return {
+      emailNotifications: true,
+      pushNotifications: true,
+      bookingAlerts: true,
+      paymentAlerts: false,
+    }
   })
+
+  const updateNotifs = (next) => {
+    setNotifs(next)
+    try { localStorage.setItem(storageKey, JSON.stringify(next)) } catch (_) { /* ignore */ }
+  }
 
   const changePw = useMutation({
     mutationFn: (data) => api.put('/auth/change-password', data),
@@ -164,22 +176,22 @@ export function SettingsPage() {
           <ToggleRow
             label="Email notifications"
             checked={notifs.emailNotifications}
-            onChange={v => setNotifs({ ...notifs, emailNotifications: v })}
+            onChange={v => updateNotifs({ ...notifs, emailNotifications: v })}
           />
           <ToggleRow
             label="Push notifications"
             checked={notifs.pushNotifications}
-            onChange={v => setNotifs({ ...notifs, pushNotifications: v })}
+            onChange={v => updateNotifs({ ...notifs, pushNotifications: v })}
           />
           <ToggleRow
             label="Booking alerts"
             checked={notifs.bookingAlerts}
-            onChange={v => setNotifs({ ...notifs, bookingAlerts: v })}
+            onChange={v => updateNotifs({ ...notifs, bookingAlerts: v })}
           />
           <ToggleRow
             label="Payment alerts"
             checked={notifs.paymentAlerts}
-            onChange={v => setNotifs({ ...notifs, paymentAlerts: v })}
+            onChange={v => updateNotifs({ ...notifs, paymentAlerts: v })}
           />
         </div>
       </div>

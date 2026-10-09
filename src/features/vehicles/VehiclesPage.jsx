@@ -34,7 +34,7 @@ export function VehiclesPage() {
   })
 
   const update = useMutation({
-    mutationFn: ({ id, data }) => api.put(`/vehicles/${id}`, data),
+    mutationFn: ({ id, data }) => api.patch(`/vehicles/${id}`, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['vendor-vehicles'] }); setEditTarget(null); setForm(initial) },
   })
 
