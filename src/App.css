@@ -119,6 +119,7 @@ body{background:var(--page-bg)}
 /* ── Utilization bars ── */
 .utilization-bar{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
 .utilization-bar__track{height:10px;border-radius:var(--radius-btn);background:#eeeeee;overflow:hidden;display:flex}
+.utilization-bar__fill{height:100%;border-radius:var(--radius-btn);transition:width .3s ease}
 .utilization-bar__fill--rent{background:#4B8EF1}
 .utilization-bar__fill--avail{background:var(--lime)}
 .utilization-bar__fill--maint{background:#FFB800}
