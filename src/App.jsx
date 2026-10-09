@@ -11,6 +11,8 @@ import { ReportsPage } from './features/reports/ReportsPage'
 import { AnalyticsPage } from './features/analytics/AnalyticsPage'
 import { NotificationsPage } from './features/notifications/NotificationsPage'
 import { ProfilePage } from './features/profile/ProfilePage'
+import { EarningsPage } from './features/earnings/EarningsPage'
+import { SettingsPage } from './features/settings/SettingsPage'
 import './App.css'
 
 function ProtectedRoute({ roles }) {
@@ -26,7 +28,7 @@ export default function App() {
     <Route path="/register" element={<RegisterPage />} />
     <Route element={<ProtectedRoute roles={['ADMIN', 'VENDOR']} />}><Route element={<DashboardLayout />}>
       <Route index element={<DashboardPage />} /><Route path="notifications" element={<NotificationsPage />} /><Route path="profile" element={<ProfilePage />} />
-      <Route element={<ProtectedRoute roles={['VENDOR']} />}><Route path="vehicles" element={<VehiclesPage />} /><Route path="bookings" element={<BookingsPage />} /></Route>
+      <Route element={<ProtectedRoute roles={['VENDOR']} />}><Route path="vehicles" element={<VehiclesPage />} /><Route path="bookings" element={<BookingsPage />} /><Route path="earnings" element={<EarningsPage />} /><Route path="settings" element={<SettingsPage />} /></Route>
       <Route element={<ProtectedRoute roles={['ADMIN']} />}><Route path="admin/users" element={<AdminResourcePage type="users" />} /><Route path="admin/vendors" element={<AdminResourcePage type="vendors" />} /><Route path="admin/drivers" element={<AdminResourcePage type="drivers" />} /><Route path="admin/bookings" element={<BookingsPage />} /><Route path="admin/vehicles" element={<AdminResourcePage type="vehicles" />} /><Route path="admin/reviews" element={<AdminResourcePage type="reviews" />} /><Route path="reports" element={<ReportsPage />} /><Route path="analytics" element={<AnalyticsPage />} /></Route>
     </Route></Route>
     <Route path="*" element={<Navigate to="/" replace />} />
