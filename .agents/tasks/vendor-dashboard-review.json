@@ -1,0 +1,18 @@
+{
+  "verdict": "APPROVED",
+  "findings": [
+    {
+      "id": "dual-querykey-vendor-bookings",
+      "severity": "warning",
+      "title": "Dual queryKey for the same bookings endpoint",
+      "detail": "BookingsPage uses ['operations-bookings', role] while DashboardPage and EarningsPage use ['vendor-bookings'] for the same GET /bookings/vendor/me call. A booking state transition on BookingsPage (start, complete) invalidates only the operations-bookings cache, leaving Dashboard and Earnings stat cards and revenue charts stale until the vendor re-navigates. Fix: add qc.invalidateQueries({ queryKey: ['vendor-bookings'] }) in BookingsPage's mutation onSuccess, or consolidate both pages onto a single queryKey."
+    },
+    {
+      "id": "modal-missing-aria-dialog",
+      "severity": "warning",
+      "title": "Modal missing ARIA dialog role",
+      "detail": "Modal.jsx renders without role=\"dialog\" and aria-modal=\"true\". Screen readers won't identify the layer as a dialog or restrict virtual cursor navigation to modal content. Add both attributes to the modal container div."
+    }
+  ],
+  "reviewDoc": "e:\\Company Project\\SmartRide\\SmartRide-Web\\.agents\\tasks\\vendor-dashboard-review.md"
+}

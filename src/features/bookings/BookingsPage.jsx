@@ -15,13 +15,15 @@ export function BookingsPage() {
   const [selected, setSelected] = useState(null)
 
   const query = useQuery({
-    queryKey: ['operations-bookings', role],
+    // Key includes role so admin's /admin/bookings and vendor's /bookings/vendor/me are cached separately,
+    // yet both DashboardPage and EarningsPage (which use queryKey ['vendor-bookings']) share the vendor cache.
+    queryKey: role === 'ADMIN' ? ['admin-bookings'] : ['vendor-bookings'],
     queryFn: () => api.get(role === 'ADMIN' ? '/admin/bookings' : '/bookings/vendor/me'),
   })
   const drivers = useQuery({ queryKey: ['available-drivers'], queryFn: () => api.get('/drivers/available') })
   const action = useMutation({
     mutationFn: ({ id, name, data }) => api.patch(`/bookings/${id}/${name}`, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['operations-bookings', role] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: role === 'ADMIN' ? ['admin-bookings'] : ['vendor-bookings'] }),
   })
 
   const allBookings = query.data || []

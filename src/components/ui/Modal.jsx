@@ -10,12 +10,18 @@ export function Modal({ onClose, title, subtitle, eyebrow, children, wide }) {
   }, [onClose])
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className={`modal${wide ? ' modal--wide' : ''}`} onClick={e => e.stopPropagation()}>
+    <div className="modal-backdrop" onClick={onClose} aria-hidden="true">
+      <div
+        className={`modal${wide ? ' modal--wide' : ''}`}
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+      >
         <div className="modal__header">
           <div>
             {(eyebrow || subtitle) && <span className="eyebrow">{eyebrow || subtitle}</span>}
-            <h2>{title}</h2>
+            <h2 id="modal-title">{title}</h2>
           </div>
           <button type="button" onClick={onClose}><X /></button>
         </div>
