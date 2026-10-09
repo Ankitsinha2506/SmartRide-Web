@@ -4,6 +4,7 @@ import {
   CarFront,
   ChartNoAxesCombined,
   ClipboardList,
+  FileText,
   IdCard,
   IndianRupee,
   LayoutDashboard,
@@ -27,6 +28,7 @@ const vendorSections = [
       ["/vehicles", "My Fleet", CarFront],
       ["/bookings", "Bookings", ClipboardList],
       ["/earnings", "Earnings", IndianRupee],
+      ["/documents", "Documents", FileText],
       ["/profile", "Profile", UserCircle],
       ["/settings", "Settings", Settings],
     ],
@@ -76,6 +78,20 @@ export function DashboardLayout() {
           </button>
         </div>
 
+        {!isAdmin && (
+          <div className="sidebar-vendor-info">
+            <div className="sidebar-vendor-info__avatar">
+              {user?.name?.[0]?.toUpperCase() || "V"}
+            </div>
+            <div>
+              <div className="sidebar-vendor-info__name">
+                {user?.name || "Vendor"}
+              </div>
+              <div className="sidebar-vendor-info__role">Vendor</div>
+            </div>
+          </div>
+        )}
+
         <nav>
           {isAdmin ? (
             adminLinks.map(([to, label, Icon]) => (
@@ -108,6 +124,21 @@ export function DashboardLayout() {
             ))
           )}
         </nav>
+
+        {!isAdmin && (
+          <div style={{ marginTop: "auto", paddingBottom: "8px" }}>
+            <span className="sidebar-section-label">SWITCH ROLE</span>
+            <span className="sidebar-switch-link">
+              <Users size={16} /> Customer
+            </span>
+            <span className="sidebar-switch-link">
+              <IdCard size={16} /> Driver
+            </span>
+            <span className="sidebar-switch-link">
+              <ShieldCheck size={16} /> Admin
+            </span>
+          </div>
+        )}
 
         <div className="sidebar-footer">
           <div className="sidebar-footer__avatar">

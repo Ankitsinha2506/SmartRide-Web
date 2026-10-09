@@ -1,0 +1,31 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Design system foundation: swap font to Inter, rewrite App.css with new CSS variables and all restyled classes (dark sidebar, lime accent, new card/button/pill/utilization styles), update DashboardLayout.jsx with new sidebar structure (vendor info row, Documents link, SWITCH ROLE section), and update shared UI components StatCard.jsx (dark tone + badge prop) and StatusPill.jsx CSS classes. This FEAT is the dependency for all page implementations in FEAT-002.",
+  "status": "completed",
+  "steps": [
+    "1. Rewrite src/index.css: replace @import with Inter font (https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap), change font-family on :root to 'Inter', remove h1/h2/h3/strong Manrope override. Keep all existing CSS variables (--green, --green-dark, --cream, --line, --muted, --shadow) unchanged.",
+    "2. Rewrite src/App.css entirely. Add new CSS variables at top: --sidebar-bg:#111111, --sidebar-text:#888888, --lime:#C8F000, --lime-dark:#a8cc00, --page-bg:#F5F5F5, --white:#FFFFFF, --text-primary:#111111, --text-secondary:#666666, --border:#E8E8E8, --card-shadow:0 2px 8px rgba(0,0,0,0.06), --radius-card:16px, --radius-btn:100px, --sidebar-width:210px. KEEP existing admin vars --green, --green-dark, --line, --muted, --shadow. Restyle .sidebar to width:210px, background:var(--sidebar-bg), color:var(--sidebar-text). Restyle .sidebar nav a.active to background:var(--lime), color:var(--text-primary), border-radius:var(--radius-btn), remove old border-left. Update .main and .topbar margin-left from 250px to 210px. Add .sidebar-vendor-info and .sidebar-vendor-info__avatar (lime circle) classes. Add .sidebar-switch-link class. Add .stat-card--dark (black bg, white text) and .stat-card__badge (lime pill). Add .vendor-dashboard-grid (65fr/35fr grid). Add .utilization-bar, .utilization-bar__track, .utilization-bar__fill--rent (#4B8EF1), .utilization-bar__fill--avail (var(--lime)), .utilization-bar__fill--maint (#FFB800). Add .pending-list, .pending-item, .btn-accept (lime), .btn-decline (gray). Add .status--available (lime bg, #111 text), .status--on_rent (#1a2e4a bg, white text), .status--maintenance (#FF9800 bg, white text). Update .primary-button to background:var(--lime), color:#111, border-radius:var(--radius-btn). Update .primary-button:hover to background:var(--lime-dark). Update .toggle-switch input:checked + track to background:var(--lime). Update body background to var(--page-bg) i.e. #F5F5F5. Update .profile-hero to background:linear-gradient(120deg,#111,#222) and .profile-avatar to background:var(--lime), color:#111. Keep ALL existing class names intact (admin pages use them).",
+    "3. Update src/components/layout/DashboardLayout.jsx: (a) Add FileText to lucide-react imports. (b) Add /documents link to vendorSections array: ['/documents','Documents',FileText]. (c) Add vendor info row JSX above <nav> when !isAdmin: div.sidebar-vendor-info > div.sidebar-vendor-info__avatar (first letter of user.name) + div > div.sidebar-vendor-info__name (user.name) + div.sidebar-vendor-info__role ('Vendor'). (d) Add SWITCH ROLE section at bottom of vendor nav (after all vendorSection links, before sidebar-footer): span.sidebar-section-label 'SWITCH ROLE' + three span.sidebar-switch-link elements (Users icon + 'Customer', IdCard icon + 'Driver', ShieldCheck icon + 'Admin') — these are display-only spans, not NavLinks. All other logic (realtime, toast, logout, mobile, topbar) stays unchanged.",
+    "4. Update src/components/ui/StatCard.jsx: add optional badge prop and support tone='dark'. When tone==='dark', add class stat-card--dark to <article>. Render badge inside <strong> as <span className='stat-card__badge'>{badge}</span> when badge is truthy. Add stat-card__icon--dark CSS class (in App.css step 2): background:#222, color:var(--lime).",
+    "5. Verify src/components/ui/StatusPill.jsx needs no change — it already uses value.toLowerCase() to derive CSS class, so status values AVAILABLE, ON_RENT, MAINTENANCE will map to .status--available, .status--on_rent, .status--maintenance automatically once the CSS is added in step 2."
+  ],
+  "acceptance_criteria": [
+    "npm run build completes with zero errors",
+    "Sidebar background is #111111 for both admin and vendor views",
+    "Active nav link shows lime (#C8F000) pill background with black text",
+    "Vendor sidebar shows vendor info row (lime avatar circle, name, 'Vendor' subtitle) above nav links",
+    "Vendor nav includes Documents link with FileText icon",
+    "SWITCH ROLE section appears at bottom of vendor nav with three non-clickable role entries",
+    "Font is Inter across the app (verify in browser DevTools computed styles)",
+    "Page background is #F5F5F5",
+    "Primary buttons are lime (#C8F000) with black text and pill shape (border-radius:100px)",
+    "Toggle switches turn lime when checked",
+    "StatusPill renders lime for AVAILABLE, dark blue for ON_RENT, orange for MAINTENANCE"
+  ],
+  "verification": [
+    "cd 'e:\\Company Project\\SmartRide\\SmartRide-Web' && npm run build"
+  ],
+  "blocked_reason": null,
+  "findings": "CSS class names match plan exactly. sidebar-vendor-info and sidebar-switch-link are new classes added in App.css. stat-card--dark and stat-card__badge are in App.css. DashboardLayout uses inline style for SWITCH ROLE wrapper margin-top:auto to push it to bottom (no new class needed). StatusPill needs no changes — value.toLowerCase() maps correctly to .status--available, .status--on_rent, .status--maintenance. The logout button in sidebar still uses .logout class — FEAT-002 pages can rely on all CSS variables (--lime, --lime-dark, --sidebar-bg, --radius-btn, --radius-card, --page-bg, --card-shadow, --sidebar-width). Documents page route is /documents and link is wired in DashboardLayout vendorSections."
+}

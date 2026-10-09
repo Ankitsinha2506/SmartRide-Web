@@ -1,0 +1,7 @@
+{
+  "task_id": "task-vendor-dashboard-rebuild",
+  "task_description": "Full visual rebuild of the SmartRide vendor dashboard to match the Figma design: dark #111 sidebar with lime #C8F000 active pills, Inter font, light gray page background, black hero stat card, BarChart on earnings, fleet utilization bars, Accept/Decline on PENDING bookings, Documents placeholder page.",
+  "status": "pending",
+  "feature_order": ["FEAT-001", "FEAT-002"],
+  "blocked_reason": null
+}

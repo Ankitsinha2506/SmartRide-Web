@@ -1,0 +1,33 @@
+{
+  "project_type": "React 19 + Vite SPA (vendor/admin dashboard)",
+  "language": "JavaScript (JSX) — no TypeScript",
+  "build_system": "Vite 8. Build command: npm run build. Dev server: npm run dev. No workspaces — single package at SmartRide-Web/.",
+  "test_framework": "None — no test runner configured in package.json",
+  "build_command": "npm run build",
+  "test_command": "npm run build (build is the only automated check)",
+  "verification_instructions": "Run `npm run build` from e:\\Company Project\\SmartRide\\SmartRide-Web. Expect zero errors and a dist/ folder. Then run `npm run dev` and manually navigate to /, /vehicles, /bookings, /earnings, /profile, /settings, /documents to confirm visual output.",
+  "snapshot_or_generated_files": null,
+  "environment_constraints": "Windows PowerShell. Workspace root is e:\\Company Project\\SmartRide\\SmartRide-Web. All file edits must use absolute paths. npm commands must be run from that directory.",
+  "contribution_requirements": "No new npm packages. Use only: React, React Router, Tanstack Query, Lucide React, Recharts, Zustand, Axios. Custom CSS only — no Tailwind. Admin pages must keep working.",
+  "key_patterns": "Custom CSS in App.css using class names + CSS variables. No CSS modules. Components import './Component.jsx'. State via Zustand (useAuthStore). Data fetching via TanStack Query v5 (useQuery/useMutation). API calls via axios wrapper at src/services/api.js. All UI components in src/components/ui/. Pages in src/features/<name>/<Name>Page.jsx.",
+  "relevant_files": [
+    "src/index.css",
+    "src/App.css",
+    "src/App.jsx",
+    "src/components/layout/DashboardLayout.jsx",
+    "src/components/ui/StatCard.jsx",
+    "src/components/ui/StatusPill.jsx",
+    "src/components/ui/FilterBar.jsx",
+    "src/components/ui/Modal.jsx",
+    "src/components/ui/DataTable.jsx",
+    "src/components/ui/PageState.jsx",
+    "src/features/dashboard/DashboardPage.jsx",
+    "src/features/vehicles/VehiclesPage.jsx",
+    "src/features/bookings/BookingsPage.jsx",
+    "src/features/earnings/EarningsPage.jsx",
+    "src/features/profile/ProfilePage.jsx",
+    "src/features/settings/SettingsPage.jsx",
+    "src/features/documents/DocumentsPage.jsx (create new)"
+  ],
+  "directory_structure": "src/App.jsx (router), src/App.css (all styles), src/index.css (font+root vars), src/components/layout/ (DashboardLayout), src/components/ui/ (StatCard, StatusPill, FilterBar, Modal, DataTable, PageState), src/features/<name>/ (page components), src/store/authStore.js (Zustand), src/services/api.js (axios), src/services/realtime.js (socket.io)"
+}
