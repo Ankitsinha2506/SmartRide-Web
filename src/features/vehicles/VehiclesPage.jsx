@@ -13,6 +13,8 @@ const initial = {
   description: '', year: new Date().getFullYear(), color: '', mileage: 0,
 }
 
+const vehicleStatus = (v) => !v.isApproved ? 'MAINTENANCE' : !v.isAvailable ? 'ON_RENT' : 'AVAILABLE'
+
 export function VehiclesPage() {
   const [modal, setModal] = useState(false)
   const [form, setForm] = useState(initial)
@@ -45,19 +47,17 @@ export function VehiclesPage() {
 
   const filterOptions = [
     { value: 'ALL', label: 'All' },
-    { value: 'APPROVED', label: 'Approved' },
-    { value: 'PENDING', label: 'Pending' },
+    { value: 'ON_RENT', label: 'On Rent' },
     { value: 'AVAILABLE', label: 'Available' },
-    { value: 'UNAVAILABLE', label: 'Unavailable' },
+    { value: 'MAINTENANCE', label: 'Maintenance' },
   ]
 
   const allVehicles = query.data || []
   const filtered = allVehicles.filter(v => {
     if (statusFilter === 'ALL') return true
-    if (statusFilter === 'APPROVED') return v.isApproved
-    if (statusFilter === 'PENDING') return !v.isApproved
+    if (statusFilter === 'ON_RENT') return !v.isAvailable && v.isApproved
     if (statusFilter === 'AVAILABLE') return v.isAvailable
-    if (statusFilter === 'UNAVAILABLE') return !v.isAvailable
+    if (statusFilter === 'MAINTENANCE') return !v.isApproved
     return true
   })
 
@@ -126,7 +126,7 @@ export function VehiclesPage() {
             <article className="vehicle-card" key={v._id || v.id}>
               <div className="vehicle-card__visual">
                 <CarFront size={44} />
-                <StatusPill value={v.isApproved ? 'APPROVED' : 'PENDING'} />
+                <StatusPill value={vehicleStatus(v)} />
               </div>
               <div className="vehicle-card__body">
                 <small>{v.category} · {v.seats} seats · {v.registrationNumber}</small>

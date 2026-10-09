@@ -1,16 +1,20 @@
-import { useQueries, useQuery } from '@tanstack/react-query'
-import { CarFront, ClipboardCheck, IndianRupee, Star, TrendingUp, Users } from 'lucide-react'
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { CarFront, ClipboardCheck, ClipboardList, IndianRupee, Pencil, Star, TrendingUp, Users } from 'lucide-react'
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 import { StatCard } from '../../components/ui/StatCard'
+import { StatusPill } from '../../components/ui/StatusPill'
 import { PageState } from '../../components/ui/PageState'
+
+const vehicleStatus = (v) => !v.isApproved ? 'MAINTENANCE' : !v.isAvailable ? 'ON_RENT' : 'AVAILABLE'
 
 export function DashboardPage() {
   const user = useAuthStore(s => s.user)
   const admin = user?.role === 'ADMIN'
   const navigate = useNavigate()
+  const qc = useQueryClient()
 
   const analytics = useQuery({ queryKey: ['analytics-dashboard'], queryFn: () => api.get('/analytics/dashboard'), enabled: admin })
   const trends = useQuery({ queryKey: ['analytics-trends'], queryFn: () => api.get('/analytics/trends?days=30'), enabled: admin })
@@ -36,34 +40,50 @@ export function DashboardPage() {
 
   // --- Vendor derived metrics ---
   const now = new Date()
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const weekStart = new Date(todayStart); weekStart.setDate(todayStart.getDate() - todayStart.getDay())
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
 
   const completedBookings = bookings.filter(b => b.status === 'COMPLETED')
-  const revenueTotal = completedBookings.reduce((s, b) => s + (b.pricing?.totalAmount || 0), 0)
-  const revenueMonth = completedBookings.filter(b => new Date(b.endDate) >= monthStart).reduce((s, b) => s + (b.pricing?.totalAmount || 0), 0)
-  const revenueWeek = completedBookings.filter(b => new Date(b.endDate) >= weekStart).reduce((s, b) => s + (b.pricing?.totalAmount || 0), 0)
-  const activeCount = bookings.filter(b => b.status === 'ACTIVE').length
-  const availableVehicles = vehicles.filter(v => v.isAvailable).length
+  const revenueMonth = completedBookings
+    .filter(b => new Date(b.endDate) >= monthStart)
+    .reduce((s, b) => s + (b.pricing?.totalAmount || 0), 0)
 
-  // 30-day chart data
-  const chartData = Array.from({ length: 30 }, (_, i) => {
-    const d = new Date(todayStart)
-    d.setDate(d.getDate() - (29 - i))
-    const label = d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })
-    const amount = completedBookings
-      .filter(b => {
-        const bd = new Date(b.endDate)
-        return bd >= d && bd < new Date(d.getTime() + 86400000)
-      })
-      .reduce((s, b) => s + (b.pricing?.totalAmount || 0), 0)
-    return { date: label, amount }
+  const onRentCount = vehicles.filter(v => !v.isAvailable && v.isApproved).length
+  const availableCount = vehicles.filter(v => v.isAvailable).length
+  const maintenanceCount = vehicles.filter(v => !v.isApproved).length
+  const pendingBookings = bookings.filter(b => b.status === 'PENDING')
+
+  // 6-month bar chart data
+  const sixMonthData = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1)
+    const nextD = new Date(now.getFullYear(), now.getMonth() - (5 - i) + 1, 1)
+    return {
+      month: d.toLocaleDateString('en-IN', { month: 'short' }),
+      amount: completedBookings
+        .filter(b => { const bd = new Date(b.endDate); return bd >= d && bd < nextD })
+        .reduce((s, b) => s + (b.pricing?.totalAmount || 0), 0),
+    }
   })
 
-  const recentBookings = [...bookings]
-    .sort((a, b) => new Date(b.startDate) - new Date(a.startDate))
-    .slice(0, 5)
+  // Month range label for chart header
+  const chartRangeLabel = sixMonthData.length > 0
+    ? `${sixMonthData[0].month} – ${sixMonthData[sixMonthData.length - 1].month} ${now.getFullYear()}`
+    : ''
+
+  // Fleet utilization percentages
+  const totalVehicles = vehicles.length || 1
+  const rentPct = Math.round((onRentCount / totalVehicles) * 100)
+  const availPct = Math.round((availableCount / totalVehicles) * 100)
+  const maintPct = Math.round((maintenanceCount / totalVehicles) * 100)
+  const utilizationPct = vehicles.length > 0 ? Math.round((onRentCount / vehicles.length) * 100) : 0
+
+  // Booking action mutation
+  const bookingAction = useMutation({
+    mutationFn: ({ id, action }) => api.patch(`/bookings/${id}/${action}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['vendor-bookings'] })
+      qc.invalidateQueries({ queryKey: ['vendor-vehicles'] })
+    },
+  })
 
   if (admin) {
     return (
@@ -119,87 +139,161 @@ export function DashboardPage() {
     <>
       <div className="page-heading">
         <div>
-          <span className="eyebrow">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
-          <h1>Good day, {user?.name?.split(' ')[0] || 'partner'}.</h1>
-          <p>Here is what is happening across your SmartRide workspace.</p>
+          <span className="eyebrow">Vendor</span>
+          <h1>Vendor Dashboard</h1>
+          <p>{user?.name} · <span style={{ color: 'var(--lime)', fontWeight: 700 }}>KYC Verified ✓</span></p>
         </div>
+        <button className="primary-button primary-button--fit" onClick={() => navigate('/vehicles')}>
+          + Add Vehicle
+        </button>
       </div>
+
       <PageState loading={loading}>
-        {/* Stats row */}
+        {/* 4-stat cards row */}
         <div className="stats-grid">
-          <StatCard icon={CarFront} label="Total vehicles" value={vehicles.length} hint={`${availableVehicles} available`} tone="mint" />
-          <StatCard icon={CarFront} label="Available vehicles" value={availableVehicles} hint="Ready to rent" tone="blue" />
-          <StatCard icon={ClipboardCheck} label="Completed bookings" value={completedBookings.length} hint={`${activeCount} active now`} tone="amber" />
-          <StatCard icon={IndianRupee} label="Total earned" value={`₹${revenueTotal.toLocaleString('en-IN')}`} hint="Completed rentals" tone="violet" />
+          <StatCard icon={CarFront} label="Total Vehicles" value={vehicles.length} hint={`${onRentCount} on rent`} tone="mint" />
+          <StatCard icon={IndianRupee} label="This Month Revenue" value={`₹${revenueMonth.toLocaleString('en-IN')}`} hint="Current calendar month" tone="dark" badge="+14%" />
+          <StatCard icon={ClipboardList} label="Pending Requests" value={pendingBookings.length} hint="Needs action" tone="mint" />
+          <StatCard icon={Star} label="Avg. Rating" value="4.8" hint="Avg rating" tone="mint" />
         </div>
 
-        {/* Dashboard grid */}
-        <div className="dashboard-grid" style={{ marginTop: 18 }}>
-          <article className="panel panel--wide">
+        {/* 65/35 vendor dashboard grid */}
+        <div className="vendor-dashboard-grid" style={{ marginTop: 18 }}>
+          {/* LEFT: Monthly Earnings BarChart */}
+          <article className="panel">
             <div className="panel__header">
-              <div><span className="eyebrow">Last 30 days</span><h3>Revenue trend</h3></div>
+              <div>
+                <h3>Monthly Earnings</h3>
+                <small style={{ color: 'var(--text-secondary)' }}>{chartRangeLabel}</small>
+              </div>
+              <strong>₹{revenueMonth.toLocaleString('en-IN')}</strong>
             </div>
             <div className="chart">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
+                <BarChart data={sixMonthData} barSize={28}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} interval={4} />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip formatter={(v) => [`₹${Number(v).toLocaleString('en-IN')}`, 'Revenue']} />
-                  <Area type="monotone" dataKey="amount" stroke="#146c5b" fill="#d7eee8" strokeWidth={3} />
-                </AreaChart>
+                  <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
+                    {sixMonthData.map((_, i) => (
+                      <Cell key={i} fill={i === sixMonthData.length - 1 ? '#111111' : '#D9D9D9'} />
+                    ))}
+                  </Bar>
+                </BarChart>
               </ResponsiveContainer>
             </div>
           </article>
+
+          {/* RIGHT: Fleet Utilization */}
           <article className="panel">
             <div className="panel__header">
-              <div><span className="eyebrow">Latest activity</span><h3>Recent bookings</h3></div>
+              <div><h3>Fleet Utilization</h3></div>
             </div>
-            <div className="activity-list">
-              {recentBookings.length === 0 && <p className="muted" style={{ textAlign: 'center', padding: '20px 0' }}>No bookings yet</p>}
-              {recentBookings.map(b => (
-                <div key={b._id || b.id}>
-                  <span className="activity-icon"><CarFront size={17} /></span>
-                  <div>
-                    <strong>{b.bookingCode}</strong>
-                    <small>{b.vehicle?.brand} {b.vehicle?.model}</small>
-                  </div>
-                  <b style={{ fontSize: 10, color: 'var(--green)' }}>{b.status?.replaceAll('_', ' ')}</b>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '8px 0' }}>
+              <div className="utilization-bar">
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>On Rent</span>
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{onRentCount} · {rentPct}%</span>
                 </div>
-              ))}
+                <div className="utilization-bar__track">
+                  <div className="utilization-bar__fill utilization-bar__fill--rent" style={{ width: `${rentPct}%` }} />
+                </div>
+              </div>
+              <div className="utilization-bar">
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>Available</span>
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{availableCount} · {availPct}%</span>
+                </div>
+                <div className="utilization-bar__track">
+                  <div className="utilization-bar__fill utilization-bar__fill--avail" style={{ width: `${availPct}%` }} />
+                </div>
+              </div>
+              <div className="utilization-bar">
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>Maintenance</span>
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{maintenanceCount} · {maintPct}%</span>
+                </div>
+                <div className="utilization-bar__track">
+                  <div className="utilization-bar__fill utilization-bar__fill--maint" style={{ width: `${maintPct}%` }} />
+                </div>
+              </div>
             </div>
-            {bookings.length > 0 && (
-              <button className="secondary-button" style={{ marginTop: 14, fontSize: 12 }} onClick={() => navigate('/bookings')}>
-                View all bookings
-              </button>
-            )}
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)', fontSize: 13, color: 'var(--text-secondary)' }}>
+              Overall utilization: <strong style={{ color: 'var(--text-primary)' }}>{utilizationPct}%</strong>
+            </div>
           </article>
         </div>
 
-        {/* Quick actions */}
-        <div className="quick-actions">
-          <button className="quick-action-btn" onClick={() => navigate('/vehicles')}>
-            <div className="quick-action-btn__icon"><CarFront size={18} /></div>
-            <span>Add Vehicle</span>
-            <small>Expand your fleet</small>
-          </button>
-          <button className="quick-action-btn" onClick={() => navigate('/bookings')}>
-            <div className="quick-action-btn__icon"><ClipboardCheck size={18} /></div>
-            <span>View Bookings</span>
-            <small>Manage rentals</small>
-          </button>
-          <button className="quick-action-btn" onClick={() => navigate('/earnings')}>
-            <div className="quick-action-btn__icon"><TrendingUp size={18} /></div>
-            <span>View Earnings</span>
-            <small>{`₹${revenueMonth.toLocaleString('en-IN')} this month`}</small>
-          </button>
-        </div>
+        {/* Pending Approval full-width panel */}
+        <article className="panel" style={{ marginTop: 18 }}>
+          <div className="panel__header">
+            <div>
+              <h3>Pending Approval <span style={{ background: 'var(--lime)', color: '#111', borderRadius: 100, fontSize: 11, fontWeight: 700, padding: '2px 10px', marginLeft: 8 }}>{pendingBookings.length}</span></h3>
+            </div>
+          </div>
+          <div className="pending-list">
+            {pendingBookings.length === 0 && (
+              <p className="muted" style={{ textAlign: 'center', padding: '20px 0' }}>No pending bookings</p>
+            )}
+            {pendingBookings.map(b => (
+              <div className="pending-item" key={b._id || b.id}>
+                <div>
+                  <strong>{b.vehicle ? `${b.vehicle.brand} ${b.vehicle.model}` : 'Vehicle'}</strong>
+                  <small>{b.customer?.name || 'Customer'} · {new Date(b.startDate).toLocaleDateString('en-IN', { dateStyle: 'medium' })} – {new Date(b.endDate).toLocaleDateString('en-IN', { dateStyle: 'medium' })}</small>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    className="btn-accept"
+                    onClick={() => bookingAction.mutate({ id: b._id || b.id, action: 'confirm' })}
+                  >
+                    Accept
+                  </button>
+                  <button
+                    className="btn-decline"
+                    onClick={() => bookingAction.mutate({ id: b._id || b.id, action: 'cancel' })}
+                  >
+                    Decline
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
 
-        {/* Secondary stats row */}
-        <div className="stats-grid" style={{ marginTop: 18, gridTemplateColumns: 'repeat(2,1fr)' }}>
-          <StatCard icon={TrendingUp} label="This week" value={`₹${revenueWeek.toLocaleString('en-IN')}`} hint="Completed this week" tone="mint" />
-          <StatCard icon={IndianRupee} label="This month" value={`₹${revenueMonth.toLocaleString('en-IN')}`} hint="Completed this month" tone="blue" />
-        </div>
+        {/* My Fleet full-width panel */}
+        <article className="panel" style={{ marginTop: 18 }}>
+          <div className="panel__header">
+            <div><h3>My Fleet</h3></div>
+            <button className="primary-button primary-button--fit" style={{ fontSize: 12 }} onClick={() => navigate('/vehicles')}>
+              + Add Vehicle
+            </button>
+          </div>
+          <div className="vehicle-grid">
+            {vehicles.slice(0, 4).map(v => (
+              <article className="vehicle-card" key={v._id || v.id}>
+                <div className="vehicle-card__visual">
+                  <CarFront size={44} />
+                  <StatusPill value={vehicleStatus(v)} />
+                </div>
+                <div className="vehicle-card__body">
+                  <small>{v.category} · {v.seats} seats · {v.registrationNumber}</small>
+                  <h3>{v.brand} {v.model}{v.year ? ` (${v.year})` : ''}</h3>
+                  <p>{v.city} · {v.fuelType} · {v.transmission}</p>
+                  <div>
+                    <strong>₹{v.pricePerDay?.toLocaleString('en-IN')}</strong>
+                    <span>/ day</span>
+                  </div>
+                  <div className="vehicle-card__actions">
+                    <button className="edit-button" onClick={() => navigate('/vehicles')}>
+                      <Pencil size={13} /> Edit
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </article>
       </PageState>
     </>
   )

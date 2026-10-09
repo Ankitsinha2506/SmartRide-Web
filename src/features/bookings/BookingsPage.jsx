@@ -60,6 +60,13 @@ export function BookingsPage() {
     {
       key: 'action', label: 'Action',
       render: r => {
+        if (r.status === 'PENDING' && role === 'VENDOR')
+          return (
+            <div className="row-actions">
+              <button className="btn-accept" onClick={e => { e.stopPropagation(); action.mutate({ id: r.id || r._id, name: 'confirm' }) }}>Accept</button>
+              <button className="btn-decline" onClick={e => { e.stopPropagation(); action.mutate({ id: r.id || r._id, name: 'cancel' }) }}>Decline</button>
+            </div>
+          )
         if (r.serviceType !== 'CAR_ONLY' && !r.driver)
           return (
             <select defaultValue="" onChange={event => event.target.value && action.mutate({ id: r.id, name: 'assign-driver', data: { driverId: event.target.value } })}>
@@ -151,6 +158,12 @@ export function BookingsPage() {
             </div>
           </div>
           <div className="modal-actions">
+            {selected.status === 'PENDING' && role === 'VENDOR' && (
+              <>
+                <button className="btn-accept" onClick={() => { action.mutate({ id: selected.id || selected._id, name: 'confirm' }); setSelected(null) }}>Accept</button>
+                <button className="btn-decline" onClick={() => { action.mutate({ id: selected.id || selected._id, name: 'cancel' }); setSelected(null) }}>Decline</button>
+              </>
+            )}
             {selected.status === 'CONFIRMED' && selected.serviceType === 'CAR_ONLY' && (
               <button
                 className="primary-button primary-button--fit"

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { CarFront, Clock, IndianRupee, TrendingUp } from 'lucide-react'
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { api } from '../../services/api'
 import { StatCard } from '../../components/ui/StatCard'
 import { PageState } from '../../components/ui/PageState'
@@ -99,13 +99,17 @@ export function EarningsPage() {
           </div>
           <div className="chart">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
+              <BarChart data={chartData} barSize={18}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} interval={4} />
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip formatter={(v) => [`₹${Number(v).toLocaleString('en-IN')}`, 'Revenue']} />
-                <Area type="monotone" dataKey="amount" stroke="#146c5b" fill="#d7eee8" strokeWidth={3} />
-              </AreaChart>
+                <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
+                  {chartData.map((_, i) => (
+                    <Cell key={i} fill={i === chartData.length - 1 ? '#111111' : '#D9D9D9'} />
+                  ))}
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </article>

@@ -89,7 +89,7 @@ export function SettingsPage() {
         {/* Account info card */}
         <div className="settings-card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-            <User size={18} color="var(--green)" />
+            <User size={18} color="var(--lime)" />
             <h3 style={{ margin: 0 }}>Account information</h3>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -118,7 +118,7 @@ export function SettingsPage() {
         {/* Change password card */}
         <div className="settings-card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-            <Lock size={18} color="var(--green)" />
+            <Lock size={18} color="var(--lime)" />
             <h3 style={{ margin: 0 }}>Security</h3>
           </div>
           <form onSubmit={handlePwSubmit}>
@@ -160,7 +160,7 @@ export function SettingsPage() {
                 Password changed successfully.
               </div>
             )}
-            <button className="primary-button" type="submit" style={{ marginTop: 16, width: 'auto', padding: '11px 20px' }}>
+            <button className="primary-button primary-button--fit" type="submit" style={{ marginTop: 16 }}>
               {changePw.isPending ? 'Saving…' : 'Change password'}
             </button>
           </form>
@@ -169,7 +169,7 @@ export function SettingsPage() {
         {/* Notification preferences card */}
         <div className="settings-card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-            <Bell size={18} color="var(--green)" />
+            <Bell size={18} color="var(--lime)" />
             <h3 style={{ margin: 0 }}>Notification preferences</h3>
           </div>
           {/* TODO: persist to /vendor/preferences when endpoint is available */}
