@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Search,
   Settings,
   ShieldCheck,
   UserCircle,
@@ -34,23 +35,28 @@ const vendorSections = [
 ];
 
 const adminLinks = [
-  ["/", "Overview", LayoutDashboard],
+  ["/admin/dashboard", "Overview", LayoutDashboard],
   ["/admin/users", "Users", Users],
   ["/admin/vendors", "Vendors", ShieldCheck],
   ["/admin/drivers", "Drivers", IdCard],
-  ["/admin/bookings", "Assignments", ClipboardList],
+  ["/admin/bookings", "Bookings", ClipboardList],
   ["/admin/vehicles", "Vehicles", CarFront],
   ["/admin/reviews", "Reviews", ClipboardList],
-  ["/reports", "Reports", ClipboardList],
+  ["/reports?tab=payments", "Payments", ClipboardList],
   ["/analytics", "Analytics", ChartNoAxesCombined],
 ];
 
 export function DashboardLayout() {
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const { user, token, logout } = useAuthStore();
   const navigate = useNavigate();
   const isAdmin = user?.role === "ADMIN";
+  const searchResults = adminLinks.filter(([, label]) =>
+    label.toLowerCase().includes(searchTerm.trim().toLowerCase()),
+  );
 
   useEffect(
     () =>
@@ -63,9 +69,9 @@ export function DashboardLayout() {
 
   return (
     <div className="app-shell">
-      <aside className={`sidebar ${open ? "sidebar--open" : ""}`}>
+      <aside className={`sidebar ${open ? "sidebar--open" : ""} ${isAdmin ? "sidebar--admin" : ""}`}>
         <div className="brand">
-          <span>
+          <span className={isAdmin ? "brand__mark--admin" : ""}>
             <CarFront />
           </span>
           <div>
@@ -84,6 +90,7 @@ export function DashboardLayout() {
                 to={to}
                 end={to === "/"}
                 onClick={() => setOpen(false)}
+                className={isAdmin ? "admin-nav-link" : undefined}
               >
                 <Icon size={19} />
                 {label}
@@ -110,7 +117,7 @@ export function DashboardLayout() {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="sidebar-footer__avatar">
+          <div className={`sidebar-footer__avatar ${isAdmin ? "sidebar-footer__avatar--admin" : ""}`}>
             {user?.name?.[0]?.toUpperCase() || "S"}
           </div>
           <div>
@@ -120,7 +127,7 @@ export function DashboardLayout() {
         </div>
 
         <button
-          className="logout"
+          className={`logout ${isAdmin ? "logout--admin" : ""}`}
           onClick={() => {
             logout();
             navigate("/login");
@@ -132,22 +139,57 @@ export function DashboardLayout() {
 
       {open && <button className="backdrop" onClick={() => setOpen(false)} />}
 
-      <main className="main">
-        <header className="topbar">
+      <main className={`main ${isAdmin ? "admin-main" : ""}`}>
+        <header className={`topbar ${isAdmin ? "!border-[#e5e9e4] !bg-white/95" : ""}`}>
           <button className="menu-button" onClick={() => setOpen(true)}>
             <Menu />
           </button>
-          <div>
-            <small>Workspace</small>
-            <strong>
-              {isAdmin ? "Administration" : "Vendor operations"}
-            </strong>
-          </div>
+          {!isAdmin && (
+            <div>
+              <small>Workspace</small>
+              <strong>Vendor operations</strong>
+            </div>
+          )}
+          {isAdmin && (
+            <div className="admin-global-search">
+              <Search size={18} aria-hidden="true" />
+              <input
+                type="search"
+                placeholder="Search admin pages..."
+                aria-label="Search admin pages"
+                aria-expanded={searchOpen && Boolean(searchTerm.trim())}
+                onFocus={() => setSearchOpen(true)}
+                onBlur={() => window.setTimeout(() => setSearchOpen(false), 120)}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    setSearchTerm("");
+                    setSearchOpen(false);
+                  }
+                  if (event.key === "Enter" && searchResults[0]) {
+                    navigate(searchResults[0][0]);
+                    setSearchTerm("");
+                    setSearchOpen(false);
+                  }
+                }}
+                value={searchTerm}
+              />
+              {searchOpen && searchTerm.trim() && (
+                <div className="admin-global-search__results">
+                  {searchResults.length ? searchResults.map(([to, label, Icon]) => (
+                    <NavLink key={to} to={to} onClick={() => setSearchTerm("")}>
+                      <Icon size={16} />{label}
+                    </NavLink>
+                  )) : <span>No matching admin pages</span>}
+                </div>
+              )}
+            </div>
+          )}
           <div className="topbar__actions">
             <NavLink to="/notifications" className="icon-button">
               <Bell size={19} />
             </NavLink>
-            <NavLink to="/profile" className="avatar">
+            <NavLink to="/profile" className={`avatar ${isAdmin ? "avatar--admin" : ""}`}>
               {user?.name?.[0] || "S"}
             </NavLink>
           </div>
