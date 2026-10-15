@@ -1,20 +1,31 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CarFront, ClipboardCheck, ClipboardList, IndianRupee, Pencil, Star, TrendingUp, Users } from 'lucide-react'
+
+function formatTimeAgo(dateStr) {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return `${mins} min ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs} hour${hrs > 1 ? 's' : ''} ago`
+  return `${Math.floor(hrs / 24)} days ago`
+}
+import { CarFront, ClipboardCheck, ClipboardList, IndianRupee, Pencil, Power, Star, Users } from 'lucide-react'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 import { StatCard } from '../../components/ui/StatCard'
 import { StatusPill } from '../../components/ui/StatusPill'
 import { PageState } from '../../components/ui/PageState'
 
-const vehicleStatus = (v) => !v.isApproved ? 'MAINTENANCE' : !v.isAvailable ? 'ON_RENT' : 'AVAILABLE'
+const vehicleStatus = (v) => !v.isActive ? 'INACTIVE' : !v.isApproved ? 'MAINTENANCE' : !v.isAvailable ? 'ON_RENT' : 'AVAILABLE'
 
 export function DashboardPage() {
   const user = useAuthStore(s => s.user)
   const admin = user?.role === 'ADMIN'
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const [searchParams] = useSearchParams()
+  const searchTerm = (searchParams.get('q') || '').trim().toLowerCase()
 
   const analytics = useQuery({ queryKey: ['analytics-dashboard'], queryFn: () => api.get('/analytics/dashboard'), enabled: admin })
   const trends = useQuery({ queryKey: ['analytics-trends'], queryFn: () => api.get('/analytics/trends?days=30'), enabled: admin })
@@ -24,11 +35,26 @@ export function DashboardPage() {
       { queryKey: ['vendor-bookings'], queryFn: () => api.get('/bookings/vendor/me'), enabled: !admin },
     ]
   })
+  const vendorProfile = useQuery({
+    queryKey: ['profile', 'VENDOR'],
+    queryFn: () => api.get('/vendors/me'),
+    enabled: !admin,
+  })
+  const reviews = useQuery({
+    queryKey: ['vendor-reviews', vendorProfile.data?.id],
+    queryFn: () => api.get(`/reviews/vendor/${vendorProfile.data.id}`),
+    enabled: !admin && Boolean(vendorProfile.data?.id),
+  })
 
-  const loading = admin ? analytics.isLoading : vendor.some(q => q.isLoading)
+  const loading = admin
+    ? analytics.isLoading || trends.isLoading
+    : vendor.some(q => q.isLoading) || vendorProfile.isLoading
+  const pageError = admin
+    ? analytics.error || trends.error
+    : vendor.find(query => query.error)?.error || vendorProfile.error
   const data = analytics.data || {}
-  const vehicles = vendor[0]?.data || []
-  const bookings = vendor[1]?.data || []
+  const vehicles = Array.isArray(vendor[0]?.data) ? vendor[0].data : []
+  const bookings = Array.isArray(vendor[1]?.data) ? vendor[1].data : []
 
   // --- Admin stats ---
   const adminStats = [
@@ -44,13 +70,44 @@ export function DashboardPage() {
 
   const completedBookings = bookings.filter(b => b.status === 'COMPLETED')
   const revenueMonth = completedBookings
-    .filter(b => new Date(b.endDate) >= monthStart)
+    .filter(b => {
+      const completedAt = new Date(b.completedAt || b.endDate)
+      return completedAt >= monthStart && completedAt <= now
+    })
     .reduce((s, b) => s + (b.pricing?.totalAmount || 0), 0)
 
-  const onRentCount = vehicles.filter(v => !v.isAvailable && v.isApproved).length
-  const availableCount = vehicles.filter(v => v.isAvailable).length
-  const maintenanceCount = vehicles.filter(v => !v.isApproved).length
-  const pendingBookings = bookings.filter(b => b.status === 'PENDING')
+  const onRentCount = vehicles.filter(v => v.isActive && !v.isAvailable && v.isApproved).length
+  const availableCount = vehicles.filter(v => v.isActive && v.isApproved && v.isAvailable).length
+  const maintenanceCount = vehicles.filter(v => v.isActive && !v.isApproved).length
+  const pendingBookings = bookings.filter(b =>
+    b.status === 'PENDING_PAYMENT'
+    && b.paymentStatus === 'PENDING'
+    && (!b.vendorResponse || b.vendorResponse === 'PENDING'),
+  )
+  const searchableBookings = pendingBookings.filter(booking => [
+    booking.bookingCode,
+    booking.customer?.name,
+    booking.vehicle?.brand,
+    booking.vehicle?.model,
+    booking.customerVehicle?.make,
+    booking.customerVehicle?.model,
+  ].filter(Boolean).join(' ').toLowerCase().includes(searchTerm))
+  const searchableVehicles = vehicles.filter(vehicle => [
+    vehicle.displayName,
+    vehicle.brand,
+    vehicle.model,
+    vehicle.year,
+    vehicle.registrationNumber,
+    vehicle.city,
+    vehicle.category,
+    vehicle.fuelType,
+    vehicle.transmission,
+  ].filter(Boolean).join(' ').toLowerCase().includes(searchTerm))
+  const vendorReviews = Array.isArray(reviews.data) ? reviews.data : []
+  const averageRating = vendorReviews.length
+    ? (vendorReviews.reduce((sum, review) => sum + Number(review.vendorRating || 0), 0) / vendorReviews.length).toFixed(1)
+    : '—'
+  const kycStatus = vendorProfile.data?.kyc?.verificationStatus || 'NOT_SUBMITTED'
 
   // 6-month bar chart data
   const sixMonthData = Array.from({ length: 6 }, (_, i) => {
@@ -59,7 +116,7 @@ export function DashboardPage() {
     return {
       month: d.toLocaleDateString('en-IN', { month: 'short' }),
       amount: completedBookings
-        .filter(b => { const bd = new Date(b.endDate); return bd >= d && bd < nextD })
+        .filter(b => { const bd = new Date(b.completedAt || b.endDate); return bd >= d && bd < nextD })
         .reduce((s, b) => s + (b.pricing?.totalAmount || 0), 0),
     }
   })
@@ -78,11 +135,16 @@ export function DashboardPage() {
 
   // Booking action mutation
   const bookingAction = useMutation({
-    mutationFn: ({ id, action }) => api.patch(`/bookings/${id}/${action}`),
+    mutationFn: ({ id, decision }) =>
+      api.patch(`/bookings/${id}/vendor-response`, { decision }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['vendor-bookings'] })
       qc.invalidateQueries({ queryKey: ['vendor-vehicles'] })
     },
+  })
+  const availability = useMutation({
+    mutationFn: ({ id, value }) => api.patch(`/vehicles/${id}/availability`, { isAvailable: value }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vendor-vehicles'] }),
   })
 
   if (admin) {
@@ -95,7 +157,7 @@ export function DashboardPage() {
             <p>Here is what is happening across your SmartRide workspace.</p>
           </div>
         </div>
-        <PageState loading={loading}>
+        <PageState loading={loading} error={pageError}>
           <div className="stats-grid">
             {adminStats.map(([Icon, label, value, hint, tone]) => (
               <StatCard key={label} icon={Icon} label={label} value={value} hint={hint} tone={tone} />
@@ -141,20 +203,20 @@ export function DashboardPage() {
         <div>
           <span className="eyebrow">Vendor</span>
           <h1>Vendor Dashboard</h1>
-          <p>{user?.name} · <span style={{ color: 'var(--lime)', fontWeight: 700 }}>KYC Verified ✓</span></p>
+          <p>{user?.name} · <span className={`dashboard-kyc dashboard-kyc--${kycStatus.toLowerCase()}`}>{kycStatus === 'VERIFIED' ? 'KYC verified' : `KYC ${kycStatus.toLowerCase().replaceAll('_', ' ')}`}</span></p>
         </div>
-        <button className="primary-button primary-button--fit" onClick={() => navigate('/vehicles')}>
+        <button className="primary-button primary-button--fit" onClick={() => navigate('/vehicles/add')}>
           + Add Vehicle
         </button>
       </div>
 
-      <PageState loading={loading}>
+      <PageState loading={loading} error={pageError}>
         {/* 4-stat cards row */}
         <div className="stats-grid">
           <StatCard icon={CarFront} label="Total Vehicles" value={vehicles.length} hint={`${onRentCount} on rent`} tone="mint" />
-          <StatCard icon={IndianRupee} label="This Month Revenue" value={`₹${revenueMonth.toLocaleString('en-IN')}`} hint="Current calendar month" tone="dark" badge="+14%" />
+          <StatCard icon={IndianRupee} label="This Month Revenue" value={`₹${revenueMonth.toLocaleString('en-IN')}`} hint="Completed rentals this month" tone="dark" />
           <StatCard icon={ClipboardList} label="Pending Requests" value={pendingBookings.length} hint="Needs action" tone="mint" />
-          <StatCard icon={Star} label="Avg. Rating" value="4.8" hint="Avg rating" tone="mint" />
+          <StatCard icon={Star} label="Avg. Rating" value={averageRating} hint={`${vendorReviews.length} customer reviews`} tone="mint" />
         </div>
 
         {/* 65/35 vendor dashboard grid */}
@@ -226,38 +288,61 @@ export function DashboardPage() {
         </div>
 
         {/* Pending Approval full-width panel */}
-        <article className="panel" style={{ marginTop: 18 }}>
+        <article className="panel dashboard-fleet-panel" style={{ marginTop: 18 }}>
           <div className="panel__header">
             <div>
               <h3>Pending Approval <span style={{ background: 'var(--lime)', color: '#111', borderRadius: 100, fontSize: 11, fontWeight: 700, padding: '2px 10px', marginLeft: 8 }}>{pendingBookings.length}</span></h3>
             </div>
           </div>
-          <div className="pending-list">
-            {pendingBookings.length === 0 && (
-              <p className="muted" style={{ textAlign: 'center', padding: '20px 0' }}>No pending bookings</p>
+          {bookingAction.error && (
+            <div className="form-error">{bookingAction.error.message}</div>
+          )}
+          {searchTerm && (
+            <p className="dashboard-search-caption">Showing dashboard matches for “{searchParams.get('q')}”. Clear the search above to restore all items.</p>
+          )}
+          <div className="booking-row-list">
+            {searchableBookings.length === 0 && (
+              <p className="muted" style={{ textAlign: 'center', padding: '20px 0' }}>
+                {searchTerm ? 'No matching pending bookings' : 'No pending bookings'}
+              </p>
             )}
-            {pendingBookings.map(b => (
-              <div className="pending-item" key={b._id || b.id}>
-                <div>
-                  <strong>{b.vehicle ? `${b.vehicle.brand} ${b.vehicle.model}` : 'Vehicle'}</strong>
-                  <small>{b.customer?.name || 'Customer'} · {new Date(b.startDate).toLocaleDateString('en-IN', { dateStyle: 'medium' })} – {new Date(b.endDate).toLocaleDateString('en-IN', { dateStyle: 'medium' })}</small>
+            {searchableBookings.map(b => {
+              const vehicleName = b.vehicle ? `${b.vehicle.brand} ${b.vehicle.model}` : 'Vehicle'
+              const dateRange = b.startDate && b.endDate
+                ? `${new Date(b.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} – ${new Date(b.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                : ''
+              const amount = b.pricing?.totalAmount ? `₹${b.pricing.totalAmount.toLocaleString('en-IN')}` : '—'
+              return (
+                <div className="booking-row" key={b._id || b.id}>
+                  <div className="booking-row__info">
+                    <strong>{b.customer?.name || 'Customer'}</strong>
+                    <div className="sub">{vehicleName} · {dateRange}</div>
+                    <div className="code">{b.bookingCode} · {b.createdAt ? formatTimeAgo(b.createdAt) : ''}</div>
+                  </div>
+                  <div className="booking-row__amount">{amount}</div>
+                  <div className="booking-row__actions">
+                    <button
+                      className="btn-accept"
+                      disabled={bookingAction.isPending}
+                      onClick={() => bookingAction.mutate({ id: b._id || b.id, decision: 'ACCEPTED' })}
+                    >
+                      Accept
+                    </button>
+                    <button
+                      className="btn-decline"
+                      disabled={bookingAction.isPending}
+                      onClick={() => {
+                        if (window.confirm(`Decline booking ${b.bookingCode}?`)) {
+                          bookingAction.mutate({ id: b._id || b.id, decision: 'DECLINED' })
+                        }
+                      }}
+                    >
+                      Decline
+                    </button>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    className="btn-accept"
-                    onClick={() => bookingAction.mutate({ id: b._id || b.id, action: 'confirm' })}
-                  >
-                    Accept
-                  </button>
-                  <button
-                    className="btn-decline"
-                    onClick={() => bookingAction.mutate({ id: b._id || b.id, action: 'cancel' })}
-                  >
-                    Decline
-                  </button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </article>
 
@@ -265,34 +350,70 @@ export function DashboardPage() {
         <article className="panel" style={{ marginTop: 18 }}>
           <div className="panel__header">
             <div><h3>My Fleet</h3></div>
-            <button className="primary-button primary-button--fit" style={{ fontSize: 12 }} onClick={() => navigate('/vehicles')}>
+            <button className="primary-button primary-button--fit" style={{ fontSize: 12 }} onClick={() => navigate('/vehicles/add')}>
               + Add Vehicle
             </button>
           </div>
+          {searchableVehicles.length === 0 ? (
+            <p className="muted dashboard-empty">
+              {vehicles.length ? 'No fleet vehicles match your search.' : 'Your fleet is empty. Add your first vehicle to start accepting bookings.'}
+            </p>
+          ) : (
           <div className="vehicle-grid">
-            {vehicles.slice(0, 4).map(v => (
-              <article className="vehicle-card" key={v._id || v.id}>
+            {(searchTerm ? searchableVehicles : searchableVehicles.slice(0, 4)).map(v => {
+              const vehicleId = v._id || v.id
+              const activeRental = bookings.some(booking => {
+                const bookingVehicleId = booking.vehicle?._id || booking.vehicle?.id || booking.vehicleId
+                return booking.status === 'ACTIVE' && String(bookingVehicleId) === String(vehicleId)
+              })
+              return (
+              <article className="vehicle-card dashboard-vehicle-card" key={vehicleId}>
                 <div className="vehicle-card__visual">
-                  <CarFront size={44} />
+                  <CarFront className="dashboard-vehicle-fallback" size={44} aria-hidden="true" />
+                  {v.images?.[0]
+                    ? <img
+                        className="dashboard-vehicle-image"
+                        src={v.images[0]}
+                        alt={`${v.brand || ''} ${v.model || ''}`.trim() || 'Vehicle'}
+                        onError={event => {
+                          event.currentTarget.style.display = 'none'
+                        }}
+                      />
+                    : null}
                   <StatusPill value={vehicleStatus(v)} />
                 </div>
                 <div className="vehicle-card__body">
-                  <small>{v.category} · {v.seats} seats · {v.registrationNumber}</small>
-                  <h3>{v.brand} {v.model}{v.year ? ` (${v.year})` : ''}</h3>
-                  <p>{v.city} · {v.fuelType} · {v.transmission}</p>
-                  <div>
-                    <strong>₹{v.pricePerDay?.toLocaleString('en-IN')}</strong>
+                  <small>{v.category || 'Vehicle'} · {v.seats || '—'} seats · {v.registrationNumber || 'Registration pending'}</small>
+                  <h3>{v.displayName || `${v.brand || ''} ${v.model || ''}`.trim() || 'Vehicle'}</h3>
+                  <p>{[v.city, v.fuelType, v.transmission].filter(Boolean).join(' · ') || 'Vehicle details not provided'}</p>
+                  <div className="dashboard-vehicle-price">
+                    <strong>₹{Number(v.pricePerDay || 0).toLocaleString('en-IN')}</strong>
                     <span>/ day</span>
                   </div>
                   <div className="vehicle-card__actions">
-                    <button className="edit-button" onClick={() => navigate('/vehicles')}>
+                    <Link className="edit-button" to={`/vehicles/${v._id || v.id}/edit`}>
                       <Pencil size={13} /> Edit
+                    </Link>
+                    <button
+                      className={`edit-button${v.isAvailable ? '' : ' edit-button--paused'}`}
+                      disabled={!v.isActive || !v.isApproved || !v.isAvailable && activeRental || availability.isPending}
+                      aria-label={`${v.isAvailable ? 'Pause' : activeRental ? 'Vehicle on rent' : 'Make available'}: ${v.displayName || `${v.brand || ''} ${v.model || ''}`.trim() || 'vehicle'}`}
+                      onClick={() => availability.mutate({ id: vehicleId, value: !v.isAvailable })}
+                      type="button"
+                    >
+                      <Power size={13} /> {v.isAvailable ? 'Pause' : activeRental ? 'On rent' : 'Make available'}
                     </button>
                   </div>
                 </div>
               </article>
-            ))}
+              )
+            })}
           </div>
+          )}
+          {availability.error && <div className="form-error" role="alert">{availability.error.message}</div>}
+          {!searchTerm && vehicles.length > 4 && (
+            <Link className="dashboard-view-all" to="/vehicles">View all {vehicles.length} vehicles</Link>
+          )}
         </article>
       </PageState>
     </>

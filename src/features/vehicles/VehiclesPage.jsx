@@ -1,216 +1,337 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CarFront, Pencil, Plus, Power } from 'lucide-react'
 import { useState } from 'react'
-import { api } from '../../services/api'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { CarFront, Grid2X2, List, Pencil, Plus, Power, Trash2, X } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { PageState } from '../../components/ui/PageState'
-import { StatusPill } from '../../components/ui/StatusPill'
-import { FilterBar } from '../../components/ui/FilterBar'
-import { Modal } from '../../components/ui/Modal'
+import { api } from '../../services/api'
 
-const initial = {
-  category: 'SEDAN', brand: '', model: '', registrationNumber: '', city: '',
-  fuelType: 'PETROL', transmission: 'MANUAL', seats: 5, pricePerDay: 1000,
-  description: '', year: new Date().getFullYear(), color: '', mileage: 0,
+const filters = ['All', 'Available', 'On Rent', 'Maintenance', 'Inactive']
+
+function vehicleStatus(vehicle) {
+  if (!vehicle.isActive) return 'Inactive'
+  if (!vehicle.isApproved) return 'Maintenance'
+  return vehicle.isAvailable ? 'Available' : 'On Rent'
 }
 
-const vehicleStatus = (v) => !v.isApproved ? 'MAINTENANCE' : !v.isAvailable ? 'ON_RENT' : 'AVAILABLE'
+function formatPrice(value) {
+  return Number(value || 0).toLocaleString('en-IN')
+}
 
 export function VehiclesPage() {
-  const [modal, setModal] = useState(false)
-  const [form, setForm] = useState(initial)
-  const [editTarget, setEditTarget] = useState(null)
-  const [statusFilter, setStatusFilter] = useState('ALL')
-  const qc = useQueryClient()
-
-  const query = useQuery({ queryKey: ['vendor-vehicles'], queryFn: () => api.get('/vehicles/vendor/me') })
-
-  const create = useMutation({
-    mutationFn: () => api.post('/vehicles', {
-      ...form,
-      seats: Number(form.seats),
-      pricePerDay: Number(form.pricePerDay),
-      year: form.year ? Number(form.year) : undefined,
-      mileage: form.mileage ? Number(form.mileage) : undefined,
-    }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['vendor-vehicles'] }); setModal(false); setForm(initial) },
+  const [filter, setFilter] = useState('All')
+  const [view, setView] = useState('grid')
+  const [vehicleToDelete, setVehicleToDelete] = useState(null)
+  const [searchParams] = useSearchParams()
+  const searchTerm = (searchParams.get('q') || '').trim().toLowerCase()
+  const queryClient = useQueryClient()
+  const query = useQuery({
+    queryKey: ['vendor-vehicles'],
+    queryFn: () => api.get('/vehicles/vendor/me'),
   })
-
-  const update = useMutation({
-    mutationFn: ({ id, data }) => api.patch(`/vehicles/${id}`, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['vendor-vehicles'] }); setEditTarget(null); setForm(initial) },
-  })
-
   const availability = useMutation({
-    mutationFn: ({ id, value }) => api.patch(`/vehicles/${id}/availability`, { isAvailable: value }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['vendor-vehicles'] }),
+    mutationFn: ({ id, value }) =>
+      api.patch(`/vehicles/${id}/availability`, { isAvailable: value }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['vendor-vehicles'] }),
+  })
+  const removeVehicle = useMutation({
+    mutationFn: (id) => api.delete(`/vehicles/${id}`),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['vendor-vehicles'] })
+      setVehicleToDelete(null)
+    },
   })
 
-  const filterOptions = [
-    { value: 'ALL', label: 'All' },
-    { value: 'ON_RENT', label: 'On Rent' },
-    { value: 'AVAILABLE', label: 'Available' },
-    { value: 'MAINTENANCE', label: 'Maintenance' },
-  ]
-
-  const allVehicles = query.data || []
-  const filtered = allVehicles.filter(v => {
-    if (statusFilter === 'ALL') return true
-    if (statusFilter === 'ON_RENT') return !v.isAvailable && v.isApproved
-    if (statusFilter === 'AVAILABLE') return v.isAvailable
-    if (statusFilter === 'MAINTENANCE') return !v.isApproved
-    return true
+  const vehicles = Array.isArray(query.data) ? query.data : []
+  const counts = {
+    Total: vehicles.length,
+    Available: vehicles.filter((vehicle) => vehicleStatus(vehicle) === 'Available').length,
+    'On Rent': vehicles.filter((vehicle) => vehicleStatus(vehicle) === 'On Rent').length,
+    Maintenance: vehicles.filter((vehicle) => vehicleStatus(vehicle) === 'Maintenance').length,
+  }
+  const visibleVehicles = vehicles.filter(vehicle => {
+    const matchesFilter = filter === 'All' || vehicleStatus(vehicle) === filter
+    const searchable = [
+      vehicle.displayName,
+      vehicle.brand,
+      vehicle.model,
+      vehicle.year,
+      vehicle.registrationNumber,
+      vehicle.city,
+      vehicle.category,
+      vehicle.fuelType,
+      vehicle.transmission,
+    ].filter(Boolean).join(' ').toLowerCase()
+    return matchesFilter && (!searchTerm || searchable.includes(searchTerm))
   })
-
-  const openEdit = (v) => {
-    setEditTarget(v)
-    setForm({
-      ...initial,
-      category: v.category || initial.category,
-      brand: v.brand || '',
-      model: v.model || '',
-      registrationNumber: v.registrationNumber || '',
-      city: v.city || '',
-      fuelType: v.fuelType || initial.fuelType,
-      transmission: v.transmission || initial.transmission,
-      seats: v.seats || initial.seats,
-      pricePerDay: v.pricePerDay || initial.pricePerDay,
-      description: v.description || '',
-      year: v.year || new Date().getFullYear(),
-      color: v.color || '',
-      mileage: v.mileage || 0,
-    })
-  }
-
-  const closeModal = () => {
-    setModal(false)
-    setEditTarget(null)
-    setForm(initial)
-  }
-
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    const payload = {
-      ...form,
-      seats: Number(form.seats),
-      pricePerDay: Number(form.pricePerDay),
-      year: form.year ? Number(form.year) : undefined,
-      mileage: form.mileage ? Number(form.mileage) : undefined,
-    }
-    if (editTarget) {
-      update.mutate({ id: editTarget._id || editTarget.id, data: payload })
-    } else {
-      create.mutate()
-    }
-  }
-
-  const isOpen = modal || !!editTarget
 
   return (
     <>
       <div className="page-heading">
         <div>
-          <span className="eyebrow">Fleet management</span>
-          <h1>Your vehicles</h1>
-          <p>Manage pricing, readiness, and marketplace approval.</p>
+          <h1>My Fleet</h1>
+          <p>{vehicles.length} vehicles listed</p>
         </div>
-        <button className="primary-button primary-button--fit" onClick={() => setModal(true)}>
-          <Plus size={18} /> Add vehicle
-        </button>
+        <Link className="primary-button primary-button--fit" to="/vehicles/add">
+          <Plus size={18} /> Add Vehicle
+        </Link>
       </div>
 
-      <FilterBar options={filterOptions} value={statusFilter} onChange={setStatusFilter} />
-
-      <PageState loading={query.isLoading} error={query.error} empty={!filtered.length}>
-        <div className="vehicle-grid">
-          {filtered.map(v => (
-            <article className="vehicle-card" key={v._id || v.id}>
-              <div className="vehicle-card__visual">
-                <CarFront size={44} />
-                <StatusPill value={vehicleStatus(v)} />
+      <PageState
+        loading={query.isLoading}
+        error={query.error}
+        empty={false}
+      >
+        <>
+          <div className="fleet-page-stats">
+            {Object.entries(counts).map(([label, count]) => (
+              <div className="fleet-stat-card" key={label}>
+                <strong>{count}</strong>
+                <span>{label}</span>
               </div>
-              <div className="vehicle-card__body">
-                <small>{v.category} · {v.seats} seats · {v.registrationNumber}</small>
-                <h3>{v.brand} {v.model}{v.year ? ` (${v.year})` : ''}</h3>
-                <p>{v.city} · {v.fuelType} · {v.transmission}</p>
-                <div>
-                  <strong>₹{v.pricePerDay?.toLocaleString('en-IN')}</strong>
-                  <span>/ day</span>
-                </div>
-                <div className="vehicle-card__actions">
-                  <button className="edit-button" onClick={() => openEdit(v)}>
-                    <Pencil size={13} /> Edit
-                  </button>
-                  <button
-                    className={`toggle ${v.isAvailable ? 'toggle--on' : ''}`}
-                    onClick={() => availability.mutate({ id: v._id || v.id, value: !v.isAvailable })}
-                  >
-                    <Power size={15} />
-                    {v.isAvailable ? 'Available' : 'Paused'}
-                  </button>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
-      </PageState>
+            ))}
+          </div>
 
-      {isOpen && (
-        <Modal
-          title={editTarget ? 'Edit vehicle' : 'Add a vehicle'}
-          eyebrow={editTarget ? 'Update inventory' : 'New inventory'}
-          onClose={closeModal}
-        >
-          <form onSubmit={handleSubmit}>
-            <div className="form-grid">
-              {[
-                ['brand', 'Brand'],
-                ['model', 'Model'],
-                ['registrationNumber', 'Registration number'],
-                ['city', 'City'],
-                ['pricePerDay', 'Price per day'],
-                ['seats', 'Seats'],
-                ['year', 'Year'],
-                ['color', 'Color (optional)'],
-              ].map(([key, label]) => (
-                <label key={key}>
-                  {label}
-                  <input
-                    value={form[key]}
-                    onChange={e => setForm({ ...form, [key]: e.target.value })}
-                    required={key !== 'color' && key !== 'year'}
-                  />
-                </label>
+          <div className="fleet-filter-row">
+            <div className="filter-bar" aria-label="Filter vehicles">
+              {filters.map((value) => (
+                <button
+                  className={`filter-bar__btn${filter === value ? ' filter-bar__btn--active' : ''}`}
+                  key={value}
+                  onClick={() => setFilter(value)}
+                  type="button"
+                >
+                  {value}
+                </button>
               ))}
-              {[
-                ['category', ['BIKE', 'SCOOTER', 'HATCHBACK', 'SEDAN', 'SUV', 'LUXURY']],
-                ['fuelType', ['PETROL', 'DIESEL', 'CNG', 'EV', 'HYBRID']],
-                ['transmission', ['MANUAL', 'AUTOMATIC']],
-              ].map(([key, values]) => (
-                <label key={key} style={{ textTransform: 'capitalize' }}>
-                  {key}
-                  <select value={form[key]} onChange={e => setForm({ ...form, [key]: e.target.value })}>
-                    {values.map(v => <option key={v}>{v}</option>)}
-                  </select>
-                </label>
-              ))}
-              <label style={{ gridColumn: '1 / -1' }}>
-                Description
-                <textarea
-                  rows={3}
-                  value={form.description}
-                  onChange={e => setForm({ ...form, description: e.target.value })}
-                  style={{ marginTop: 6, width: '100%', borderRadius: 9, border: '1px solid var(--line)', padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }}
-                />
-              </label>
             </div>
-            {(create.error || update.error) && (
-              <div className="form-error">{(create.error || update.error)?.message}</div>
-            )}
-            <button className="primary-button" type="submit">
-              {(create.isPending || update.isPending) ? 'Saving…' : editTarget ? 'Save changes' : 'Create vehicle'}
-            </button>
-          </form>
-        </Modal>
+            <div className="view-toggle" aria-label="Vehicle view">
+              <button
+                aria-label="Grid view"
+                aria-pressed={view === 'grid'}
+                className={view === 'grid' ? 'active' : ''}
+                onClick={() => setView('grid')}
+                type="button"
+              >
+                <Grid2X2 size={16} />
+              </button>
+              <button
+                aria-label="List view"
+                aria-pressed={view === 'list'}
+                className={view === 'list' ? 'active' : ''}
+                onClick={() => setView('list')}
+                type="button"
+              >
+                <List size={17} />
+              </button>
+            </div>
+          </div>
+
+          {visibleVehicles.length === 0 ? (
+            <div className="fleet-empty">
+              <CarFront size={32} />
+              <strong>
+                {vehicles.length === 0
+                  ? 'Your fleet is empty'
+                  : searchTerm ? 'No matching vehicles' : `No ${filter.toLowerCase()} vehicles`}
+              </strong>
+              <span>
+                {vehicles.length === 0
+                  ? 'Add your first vehicle to start building your fleet.'
+                  : searchTerm
+                    ? 'Try another search term or change the status filter.'
+                    : 'Try another filter to view your vehicles.'}
+              </span>
+              {vehicles.length === 0 && (
+                <Link className="primary-button primary-button--fit" to="/vehicles/add">
+                  <Plus size={17} /> Add Vehicle
+                </Link>
+              )}
+            </div>
+          ) : (
+            <div className={view === 'grid' ? 'fleet-grid' : 'fleet-list'}>
+              {visibleVehicles.map((vehicle) => {
+                const id = vehicle._id || vehicle.id
+                const status = vehicleStatus(vehicle)
+                const image = vehicle.images?.[0]
+
+                if (view === 'list') {
+                  return (
+                    <article className="fleet-list-item" key={id}>
+                      <div className="fleet-list-item__thumb">
+                        <CarFront className="fleet-image-fallback" size={27} aria-hidden="true" />
+                        {image ? (
+                          <img
+                            src={image}
+                            alt={vehicle.displayName || `${vehicle.brand} ${vehicle.model}`}
+                            onError={event => {
+                              event.currentTarget.style.display = 'none'
+                            }}
+                          />
+                        ) : null}
+                      </div>
+                      <div className="fleet-list-item__info">
+                        <h4>{vehicle.displayName || `${vehicle.brand} ${vehicle.model}`}</h4>
+                        <small>{vehicle.category} · {vehicle.registrationNumber} · {vehicle.city}</small>
+                      </div>
+                      <strong className="fleet-card__price">
+                        ₹{formatPrice(vehicle.pricePerDay)} <span>/ day</span>
+                      </strong>
+                      <div className="fleet-list-item__actions">
+                        <Link
+                          className="fleet-btn-edit"
+                          to={`/vehicles/${id}/edit`}
+                        >
+                          <Pencil size={14} /> Edit
+                        </Link>
+                        <button
+                          aria-label={`Delete ${vehicle.brand} ${vehicle.model}`}
+                          className="fleet-btn-delete"
+                          onClick={() => setVehicleToDelete(vehicle)}
+                          type="button"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                      <button
+                        className={`fleet-btn-avail${vehicle.isAvailable ? ' fleet-btn-avail--active' : ''}`}
+                        disabled={availability.isPending || status === 'Maintenance' || status === 'Inactive'}
+                        onClick={() => availability.mutate({ id, value: !vehicle.isAvailable })}
+                        type="button"
+                      >
+                        <Power size={14} />
+                        {vehicle.isAvailable ? 'Available' : 'Paused'}
+                      </button>
+                    </article>
+                  )
+                }
+
+                return (
+                  <article className="fleet-card" key={id}>
+                    <div className="fleet-card__image">
+                      <CarFront className="fleet-image-fallback" size={58} aria-hidden="true" />
+                      {image ? (
+                        <img
+                          src={image}
+                          alt={vehicle.displayName || `${vehicle.brand} ${vehicle.model}`}
+                          onError={event => {
+                            event.currentTarget.style.display = 'none'
+                          }}
+                        />
+                      ) : null}
+                      <div className="fleet-card__image-overlay">
+                        <span className={`fleet-card__status-pill fleet-card__status-pill--${status.toLowerCase().replace(' ', '-')}`}>
+                          {status}
+                        </span>
+                        <span className="fleet-card__reg-badge">{vehicle.registrationNumber}</span>
+                      </div>
+                    </div>
+                    <div className="fleet-card__body">
+                      <h3>{vehicle.displayName || `${vehicle.brand} ${vehicle.model}`}</h3>
+                      <div className="fleet-card__meta">
+                        {vehicle.category} · {vehicle.city} · {vehicle.fuelType} · {vehicle.transmission}
+                      </div>
+                      <div className="fleet-card__price">
+                        ₹{formatPrice(vehicle.pricePerDay)} <span>/ day</span>
+                      </div>
+                      <div className="fleet-card__actions">
+                        <Link
+                          className="fleet-btn-edit"
+                          to={`/vehicles/${id}/edit`}
+                        >
+                          <Pencil size={14} /> Edit
+                        </Link>
+                        <button
+                          className={`fleet-btn-avail${vehicle.isAvailable ? ' fleet-btn-avail--active' : ''}`}
+                          disabled={availability.isPending || status === 'Maintenance' || status === 'Inactive'}
+                          onClick={() => availability.mutate({ id, value: !vehicle.isAvailable })}
+                          type="button"
+                        >
+                          <Power size={14} />
+                          {vehicle.isAvailable ? 'Available' : 'Paused'}
+                        </button>
+                        <button
+                          aria-label={`Delete ${vehicle.brand} ${vehicle.model}`}
+                          className="fleet-btn-delete"
+                          onClick={() => setVehicleToDelete(vehicle)}
+                          type="button"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          )}
+          {availability.error && (
+            <div className="form-error" role="alert">
+              {availability.error.message}
+            </div>
+          )}
+          {removeVehicle.error && (
+            <div className="form-error" role="alert">
+              {removeVehicle.error.message}
+            </div>
+          )}
+        </>
+      </PageState>
+      {vehicleToDelete && (
+        <div
+          className="modal-backdrop"
+          onClick={() => !removeVehicle.isPending && setVehicleToDelete(null)}
+          role="presentation"
+        >
+          <section
+            aria-labelledby="delete-vehicle-title"
+            aria-modal="true"
+            className="modal vehicle-delete-modal"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="modal__header">
+              <div>
+                <span className="eyebrow">Remove from fleet</span>
+                <h2 id="delete-vehicle-title">Delete this vehicle?</h2>
+              </div>
+              <button
+                aria-label="Close"
+                disabled={removeVehicle.isPending}
+                onClick={() => setVehicleToDelete(null)}
+                type="button"
+              >
+                <X />
+              </button>
+            </div>
+            <p>
+              {vehicleToDelete.brand} {vehicleToDelete.model} will be removed
+              from your active fleet.
+            </p>
+            <div className="modal-actions">
+              <button
+                className="secondary-button"
+                disabled={removeVehicle.isPending}
+                onClick={() => setVehicleToDelete(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="vehicle-delete-confirm"
+                disabled={removeVehicle.isPending}
+                onClick={() =>
+                  removeVehicle.mutate(
+                    vehicleToDelete._id || vehicleToDelete.id,
+                  )
+                }
+                type="button"
+              >
+                {removeVehicle.isPending ? 'Deleting…' : 'Delete vehicle'}
+              </button>
+            </div>
+          </section>
+        </div>
       )}
     </>
   )

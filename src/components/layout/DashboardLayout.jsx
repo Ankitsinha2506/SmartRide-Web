@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bell,
   CarFront,
@@ -10,13 +10,15 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Search,
   Settings,
   ShieldCheck,
-  UserCircle,
   Users,
   X,
 } from "lucide-react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "../../services/api";
 import { connectRealtime } from "../../services/realtime";
 import { useAuthStore } from "../../store/authStore";
 
@@ -29,7 +31,6 @@ const vendorSections = [
       ["/bookings", "Bookings", ClipboardList],
       ["/earnings", "Earnings", IndianRupee],
       ["/documents", "Documents", FileText],
-      ["/profile", "Profile", UserCircle],
       ["/settings", "Settings", Settings],
     ],
   },
@@ -50,9 +51,83 @@ const adminLinks = [
 export function DashboardLayout() {
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState(null);
+  const [searchOpenPath, setSearchOpenPath] = useState(null);
   const { user, token, logout } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isAdmin = user?.role === "ADMIN";
+  const searchOpen = searchOpenPath === location.pathname;
+  const searchTerm = searchParams.get("q") || "";
+  const vendorVehicles = useQuery({
+    queryKey: ["vendor-vehicles"],
+    queryFn: () => api.get("/vehicles/vendor/me"),
+    enabled: user?.role === "VENDOR",
+  });
+  const vendorBookings = useQuery({
+    queryKey: ["vendor-bookings"],
+    queryFn: () => api.get("/bookings/vendor/me"),
+    enabled: user?.role === "VENDOR",
+  });
+  const searchResults = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return [];
+    const vehicles = (vendorVehicles.data || [])
+      .filter(vehicle => [
+        vehicle.displayName, vehicle.brand, vehicle.model, vehicle.year,
+        vehicle.registrationNumber, vehicle.city,
+      ].filter(Boolean).join(" ").toLowerCase().includes(term))
+      .slice(0, 4)
+      .map(vehicle => ({
+        key: vehicle._id || vehicle.id,
+        label: vehicle.displayName || `${vehicle.brand} ${vehicle.model}`,
+        detail: `${vehicle.registrationNumber || "Vehicle"} · ${vehicle.city || "Fleet"}`,
+        to: "/vehicles",
+      }));
+    const bookings = (vendorBookings.data || [])
+      .filter(booking => [
+        booking.bookingCode, booking.customer?.name,
+        booking.vehicle?.brand, booking.vehicle?.model,
+        booking.status,
+      ].filter(Boolean).join(" ").toLowerCase().includes(term))
+      .slice(0, 4)
+      .map(booking => ({
+        key: booking._id || booking.id,
+        label: booking.bookingCode || "Booking",
+        detail: `${booking.customer?.name || "Customer"} · ${booking.status?.replaceAll("_", " ") || "Booking"}`,
+        to: "/bookings",
+      }));
+    const vendorPages = [
+      ["/", "Dashboard", "Vendor overview"],
+      ["/vehicles", "My Fleet", "Vehicles and availability"],
+      ["/bookings", "Bookings", "Customer reservations"],
+      ["/earnings", "Earnings", "Revenue and statements"],
+      ["/documents", "Documents", "Business and vehicle compliance"],
+      ["/settings", "Settings", "Business and account preferences"],
+      ["/notifications", "Notifications", "Workspace alerts"],
+    ];
+    const adminPages = [
+      ["/", "Overview", "Platform dashboard"],
+      ["/admin/users", "Users", "Manage platform accounts"],
+      ["/admin/vendors", "Vendors", "Manage vendor accounts"],
+      ["/admin/drivers", "Drivers", "Manage drivers"],
+      ["/admin/bookings", "Assignments", "Manage bookings"],
+      ["/admin/vehicles", "Vehicles", "Manage vehicle inventory"],
+      ["/reports", "Reports", "Platform reports"],
+      ["/analytics", "Analytics", "Platform analytics"],
+    ];
+    const pages = (isAdmin ? adminPages : vendorPages)
+      .filter(([, label, detail]) => `${label} ${detail}`.toLowerCase().includes(term))
+      .map(([to, label, detail]) => ({ key: to, label: `Go to ${label}`, detail, to, type: "page" }));
+    return [...vehicles, ...bookings, ...pages].slice(0, 7);
+  }, [isAdmin, searchTerm, vendorBookings.data, vendorVehicles.data]);
+
+  const updateSearch = value => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (value) nextParams.set("q", value);
+    else nextParams.delete("q");
+    setSearchParams(nextParams, { replace: true });
+  };
 
   useEffect(
     () =>
@@ -125,31 +200,6 @@ export function DashboardLayout() {
           )}
         </nav>
 
-        {!isAdmin && (
-          <div style={{ marginTop: "auto", paddingBottom: "8px" }}>
-            <span className="sidebar-section-label">SWITCH ROLE</span>
-            <span className="sidebar-switch-link">
-              <Users size={16} /> Customer
-            </span>
-            <span className="sidebar-switch-link">
-              <IdCard size={16} /> Driver
-            </span>
-            <span className="sidebar-switch-link">
-              <ShieldCheck size={16} /> Admin
-            </span>
-          </div>
-        )}
-
-        <div className="sidebar-footer">
-          <div className="sidebar-footer__avatar">
-            {user?.name?.[0]?.toUpperCase() || "S"}
-          </div>
-          <div>
-            <div className="sidebar-footer__name">{user?.name || "Vendor"}</div>
-            <div className="sidebar-footer__role">{user?.role}</div>
-          </div>
-        </div>
-
         <button
           className="logout"
           onClick={() => {
@@ -168,11 +218,66 @@ export function DashboardLayout() {
           <button className="menu-button" onClick={() => setOpen(true)}>
             <Menu />
           </button>
-          <div>
-            <small>Workspace</small>
-            <strong>
-              {isAdmin ? "Administration" : "Vendor operations"}
-            </strong>
+          <div className="topbar-search-wrap">
+            <label
+              className="topbar-search"
+              onBlur={event => {
+                if (!event.currentTarget.parentElement?.contains(event.relatedTarget)) {
+                  setSearchOpenPath(null);
+                }
+              }}
+            >
+              <Search size={17} aria-hidden="true" />
+              <input
+                aria-label="Search vehicles and bookings"
+                type="search"
+                placeholder={isAdmin ? "Search this workspace..." : "Search vehicles, bookings, pages..."}
+                value={searchTerm}
+                onFocus={() => setSearchOpenPath(location.pathname)}
+                onChange={event => {
+                  updateSearch(event.target.value);
+                  setSearchOpenPath(location.pathname);
+                }}
+                onKeyDown={event => {
+                  if (event.key === "Escape") setSearchOpenPath(null);
+                  if (event.key === "Enter" && searchTerm.trim()) {
+                    navigate(searchResults[0]?.to || (isAdmin ? "/admin/bookings" : "/vehicles"));
+                    setSearchOpenPath(null);
+                  }
+                }}
+              />
+              {searchTerm && (
+                <button type="button" aria-label="Clear search" onClick={() => updateSearch("")}>
+                  <X size={15} />
+                </button>
+              )}
+            </label>
+            {searchOpen && searchTerm.trim() && (
+              <div className="topbar-search-results">
+                {searchResults.length ? searchResults.map(result => (
+                  <button
+                    type="button"
+                    key={`${result.to}-${result.key}`}
+                    onClick={() => {
+                      const query = searchParams.toString();
+                      navigate(`${result.to}${query ? `?${query}` : ""}`);
+                      setSearchOpenPath(null);
+                    }}
+                  >
+                    {result.type === "page"
+                      ? <Search size={16} />
+                      : result.to === "/vehicles" ? <CarFront size={16} /> : <ClipboardList size={16} />}
+                    <span><strong>{result.label}</strong><small>{result.detail}</small></span>
+                  </button>
+                )) : (
+                  <p>
+                    {vendorVehicles.isLoading || vendorBookings.isLoading
+                      ? "Searching your workspace…"
+                      : "No matching results"}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
           <div className="topbar__actions">
             <NavLink to="/notifications" className="icon-button">
